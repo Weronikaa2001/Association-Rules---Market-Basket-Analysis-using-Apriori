@@ -1,0 +1,168 @@
+---
+title: "Association Rules - Market Basket Analysis using Apriori"
+author: "Weronika Mądro"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Introduction
+Basket analysis is often used to discover relationships between items in transactional data. It is commonly applied in retail to identify purchasing patterns and generate actionable insights, such as cross-selling strategies or product placement optimization. By analyzing transaction data, basket analysis seeks to uncover associations or correlations between products that are frequently bought together.
+
+For this project, I am using a dataset sourced from Kaggle: "https://www.kaggle.com/datasets/rukenmissonnier/real-market-data". This dataset provides real-world transactional data, ideal for exploring association rules.
+
+## Association rules
+
+Association rules are a fundamental concept in data mining and machine learning, designed to identify interesting relationships between variables in large datasets. The process involves three main metrics to evaluate the strength and usefulness of these rules: support, confidence and lift. By uncovering hidden patterns and relationships in data, association rules provide valuable insights that drive strategic decision-making.
+
+## Preprocessing
+
+First step in the project is to load the data, check its structure and summarize.
+```{r}
+market <- read.csv("market.csv", sep = ";")
+summary(market)
+str(market)
+```
+The statistics indicate that all products fall within the range of 0 and 1, which aligns with the dataset's binary structure based on 0-1 logic. The structure of the data proves it.
+
+To simplify working with the data, I decided to reorganize it so that, instead of 0s and 1s in the columns, the product names themselves are displayed.
+
+```{r}
+columns <- c("Bread", "Honey", "Bacon", "Toothpaste", "Banana", "Apple", "Hazelnut", 
+             "Cheese", "Meat", "Carrot", "Cucumber", "Onion", "Milk", "Butter", 
+             "ShavingFoam", "Salt", "Flour", "HeavyCream", "Egg", "Olive", "Shampoo", "Sugar")
+
+market_transformed <- as.data.frame(lapply(columns, function(col) {
+  ifelse(market[[col]] == 1, col, "")
+}))
+
+colnames(market_transformed) <- columns
+
+```
+
+```{r}
+basket_data <- apply(market_transformed, 1, function(row) {
+  paste(row[row != ""], collapse = ",")
+})
+```
+
+A new CSV file has been created and it's going to be assigned to a new variable with a basket format.
+
+```{r}
+writeLines(basket_data, "market_basket.csv")
+```
+
+The next step will be to analyze and summarize the transactions, providing insights into the overall structure and key patterns in the data.
+```{r}
+library(arules)
+transaction <- read.transactions("market_basket.csv", format = "basket", sep = ",")
+summary(transaction)
+```
+The inspect function lists the transactions.
+```{r}
+inspect(transaction)
+```
+Size and length are being checked in this step.
+```{r}
+size(transaction)
+length(transaction)
+```
+There are 464 transactions.
+
+A plot of transaction item frequencies has now been created to analyze which products were purchased most often. The values displayed on the plot represent relative frequencies, indicating the proportion of each product's occurrences. Additionally, a table with absolute frequency values is provided below the plot for a more detailed view of the data.
+```{r}
+itemFrequencyPlot(transaction, topN=22, type="relative", main="Transactions item frequency", col="#4CAF50") 
+itemFrequency(transaction, type="absolute")
+```
+
+## Apriori Algorithm
+
+Apriori Algorithm is a foundational method in data mining used for discovering frequent itemsets and generating association rules. The algorithm starts by analyzing the dataset to find how often individual items appear and sets a minimum support value to decide which items are frequent. It then combines these frequent items to create pairs (2-item groups) and continues this process to form larger groups until no more frequent groups are found. To save time, it removes any itemsets that are not frequent, as their larger combinations will also be infrequent. Finally, the algorithm creates association rules to show how items are connected, using support, confidence and lift to measure the strength of these relationships.
+
+```{r}
+rules<-apriori(transaction, parameter=list(supp=0.1, conf=0.65, minlen=2)) 
+```
+
+After applying the Apriori algorithm with the parameters supp=0.1, conf=0.65 and minlen=2, a total of 9 rules were detected. This suggests that there are 9 distinct relationships between items in the dataset that meet the specified thresholds for support, confidence and minimum length. The support value of 0.1 indicates that the itemsets appear in at least 10% of transactions, while the confidence of 0.65 implies that 65% of the time, the presence of one item leads to the presence of another. The minimum length of 2 ensures that only rules with at least two items are considered.
+
+The next step is to use the crossTable function, which creates a contingency table for the given transaction dataset, summarizing the frequency of item combinations. This table shows how often each combination of items appears together across transactions, helping to identify patterns and associations between products.
+```{r}
+ctab<-crossTable(transaction, sort=TRUE) 
+ctab<-crossTable(transaction, measure="count", sort=TRUE) 
+ctab
+```
+The following part of code  creates a contingency table for the transaction dataset, but instead of showing counts, it calculates the probability of item combinations occurring together in the dataset. 
+```{r}
+ptab<-crossTable(transaction, measure="probability", sort=TRUE) 
+round(ptab,3)
+```
+
+## Sorting rules by confidence 
+
+Confidence represents the probability of one item being purchased given that another item is already in the transaction, making it a crucial metric for evaluating the rule's reliability.
+```{r}
+rules.by.conf<-sort(rules, by="confidence", decreasing=TRUE)
+inspect(head(rules.by.conf))
+```
+
+## Sorting rules by lift
+
+Lift measures the strength of the association between items by comparing the observed co-occurrence with what would be expected if the items were independent. 
+```{r}
+rules.by.lift<-sort(rules, by="lift", decreasing=TRUE) 
+inspect(head(rules.by.lift))
+```
+
+## Sorting rules by support 
+
+Support measures the proportion of transactions in the dataset that contain a particular itemset, indicating how commonly the itemset appears.
+```{r}
+rules.by.supp<-sort(rules, by="support", decreasing=TRUE) 
+inspect(head(rules.by.supp))
+```
+
+## Sorting rules by count 
+
+Count represents the absolute number of transactions in which a particular itemset or rule occurs, rather than the proportion.
+```{r}
+rules.by.count<- sort(rules, by="count", decreasing=TRUE) 
+inspect(head(rules.by.count))
+```
+
+## Similarity and dissimilarity measures
+
+The upcoming step computes similarity and dissimilarity measures for selected transactions using the Jaccard index as the default measure. Later on, it will be used for creating the dendrogram. 
+
+```{r}
+trans.sel<-transaction[,itemFrequency(transaction)>0.05]
+d.jac.i<-dissimilarity(trans.sel, which="items") 
+round(d.jac.i,2)
+```
+
+```{r}
+trans.sel<-transaction[,itemFrequency(transaction)>0.05]
+d_jac.t<-dissimilarity(trans.sel, which="transactions") 
+round(d_jac.t,2)
+
+```
+
+## Hierarchical clustering
+
+At this stage, I wanted to visualize how the selected items are related to each other by creating a dendrogram. The dendrogram provides a hierarchical clustering representation based on the item-based dissimilarity matrix, where items are grouped together step by step according to their similarities. This visualization helps to identify clusters of items that are frequently purchased together or share common transaction patterns, offering deeper insights into their relationships. 
+```{r}
+plot(hclust(d.jac.i, method="ward.D2"), main="Dendrogram for items")
+```
+Some of the branches in the dendrogram align well with expectations, such as butter and cheese or milk and heavy cream, as these items are often associated with similar purchasing patterns. However, some surprising outcomes occurred like pairing of items like carrots and toothpaste, which seems unusual and may indicate an unexpected buying habit or a coincidental pattern in the dataset. 
+
+Two additional graphs were created to provide a clearer view of the patterns within the association rules. The first is a grouped matrix plot and the second one is a graph-based visualization that highlights the relationships between items, showcasing how they interact and which items are central to the associations.
+
+```{r}
+library(arulesViz)
+plot(rules, method="grouped") 
+plot(rules, method="graph", control=list(type="items"))
+```
+
+## Conclusion
+
+Central items like bacon and butter are key products that often co-occur with others, making them influential in the dataset. Peripheral items like carrot and olive are less connected and may appear in fewer association rules or transactions. These findings highlight the potential for using association rules to inform business decisions, such as optimizing product placement or creating targeted promotions.
