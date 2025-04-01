@@ -25,3 +25,6 @@ In this project, the Apriori algorithm is applied to a dataset to generate frequ
 2. Once the project is cloned, navigate to the folder where the project is saved.
 3. Open the Pizza_Hut_Menu_Clustering.Rmd file in RStudio.
 4. Run the R Markdown file.
+
+OR
+visit: https://rpubs.com/weronika_madro/1284204
